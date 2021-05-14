@@ -1,0 +1,14 @@
+{
+  "name": "omeka-s-module-mirador",
+  "version": "3.0.0",
+  "license": "CECILL-2.1",
+  "description": "Mirador (module for Omeka S)",
+  "repository": {
+    "type": "git",
+    "url": "https://gitlab.com/Daniel-KM/Omeka-S-module-Mirador.git"
+  },
+  "dependencies": {
+    "gulp": "^4.0.2",
+    "gulp-concat": "^2.6.1"
+  }
+}
