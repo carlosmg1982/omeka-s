@@ -131,8 +131,6 @@ class IiifSearch extends AbstractHelper
 
         $this->prepareImageSizes();
 
-        $view = $this->getView();
-        $view->logger()->warn(print_r($this->searchFullTextPdfXml($xml, $queryWords),true));
         return $this->searchFullTextPdfXml($xml, $queryWords);
     }
 
@@ -155,9 +153,6 @@ class IiifSearch extends AbstractHelper
             'type' => 'canvas',
         ]) . '/p';
 
-        //$view->logger()->warn(print_r($this->item,true));
-        //$view->logger()->warn(print_r($this->imageSizes));
-
         $resource = $this->item;
         $matches = [];
         try {
@@ -166,7 +161,8 @@ class IiifSearch extends AbstractHelper
             foreach($xml->Layout->Page as $xmlPage) {
                 ++$index;
                 $attributes = $xmlPage->attributes();
-                $page['number'] = (string) @$attributes->PHYSICAL_IMG_NR;
+                //$page['number'] = (string) @$attributes->PHYSICAL_IMG_NR;
+                $page['number'] = "1";
                 $page['width'] = (string) @$attributes->WIDTH;
                 $page['height'] = (string) @$attributes->HEIGHT;
                 if (!strlen($page['number']) || !strlen($page['width']) || !strlen($page['height'])) {
@@ -227,17 +223,18 @@ class IiifSearch extends AbstractHelper
 
                                         ++$hit;
 
-                                        $view->logger()->warn(print_r($hit,true));
-                                        $view->logger()->warn(print_r($page,true));
-                                        $view->logger()->warn(print_r($chars,true));
-                                        $view->logger()->warn(print_r($resource,true));
-
                                         $image = $this->imageSizes[$pageIndex];
 
-                                        $view->logger()->warn(print_r($image,true));
                                         $searchResult = new AnnotationSearchResult;
                                         $searchResult->initOptions(['baseResultUrl' => $baseResultUrl, 'baseCanvasUrl' => $baseCanvasUrl]);
                                         $result['resources'][] = $searchResult->setResult(compact('resource', 'image', 'page', 'zone', 'chars', 'hit'));
+
+                                        $view->logger()->warn(print_r($page,true));
+                                        $view->logger()->warn(print_r($zone,true));
+                                        $view->logger()->warn(print_r($chars,true));
+                                        $view->logger()->warn(print_r($hit,true));
+                                        $view->logger()->warn(print_r([$resource->displayTitle()],true));
+                                        $view->logger()->warn(print_r([$image['width'],$image['height'],$image['media']->filename()],true));
 
                                         $hits[] = $searchResult->getId();
                                         // TODO Get matches as whole world and all matches in last time (preg_match_all).
@@ -275,18 +272,14 @@ class IiifSearch extends AbstractHelper
     {
         $this->xmlFile = null;
         $this->imageSizes = [];
-        $view = $this->getView();
-        $view->logger()->warn(print_r($this->imageSizes,true));
         foreach ($this->item->media() as $media) {
             $mediaType = $media->mediaType();
             if (!$this->xmlFile && in_array($mediaType, $this->xmlMediaTypes)) {
                 $this->xmlFile = $media;
-                $view->logger()->warn(__LINE__);
-                $view->logger()->warn(print_r($media->displayTitle(),true));
             } elseif ($media->hasOriginal() && strtok($mediaType, '/') === 'image') {
-                $this->imageSizes[] = ['filename'=>$media->filename(),'originalUrl'=>$media->originalUrl()];
-                $view->logger()->warn(__LINE__);
-                $view->logger()->warn(print_r(['filename'=>$media->filename(),'originalUrl'=>$media->originalUrl()],true));
+                $this->imageSizes[] = [
+                    'media' => $media,
+                ];
             }
         }
         return isset($this->xmlFile) && count($this->imageSizes);
@@ -295,20 +288,16 @@ class IiifSearch extends AbstractHelper
     protected function prepareImageSizes(): void
     {
         $view = $this->getView();
-        $view->logger()->warn(__LINE__);
-        $view->logger()->warn(print_r($this->imageSizes,true));
         // TODO Use plugin imageSize from modules IiifServer and ImageServer.
         foreach ($this->imageSizes as &$image) {
             // Some media types don't save the file locally.
-            if ($filename = $image['filename']) {
+            if ($filename = $image['media']->filename()) {
                 $filepath = $this->basePath . '/original/' . $filename;
             } else {
-                $filepath = $image['originalUrl'];
+                $filepath = $image['media']->originalUrl();
             }
-            list($image['width'],$image['height']) = getimagesize($filepath);
+            list($image['width'], $image['height']) = getimagesize($filepath);
         }
-        $view->logger()->warn(print_r($this->imageSizes,true));
-        $view->logger()->warn(__LINE__);
     }
 
     /**
