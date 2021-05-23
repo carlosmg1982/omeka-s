@@ -51,7 +51,7 @@ class ExtractOcr extends AbstractJob
      */
     protected $store = [
         'item' => false,
-        'media_pdf' => false,
+        'media_image' => false,
         'media_xml' => false,
     ];
 
@@ -123,9 +123,10 @@ class ExtractOcr extends AbstractJob
         $this->createEmptyXml = (bool) $settings->get('extractocr_create_empty_xml');
 
         // TODO The media type can be non-standard for pdf (text/pdf…) on old servers.
+        // TODO CHECK PDFS
         $query = [
-            'media_type' => 'application/pdf',
-            'extension' => 'pdf',
+            'media_type' => 'image/jpeg',
+            'extension' => 'jpg',
         ];
         if ($itemId) {
             $query['item_id'] = $itemId;
@@ -135,31 +136,31 @@ class ExtractOcr extends AbstractJob
         $response = $this->api->search('media', $query, ['returnScalar' => 'id']);
         $totalToProcess = $response->getTotalResults();
         if (empty($totalToProcess)) {
-            $message = new Message('No item with a pdf to process.'); // @translate,
+            $message = new Message('No item with a image to process.'); // @translate,
             $this->logger->notice($message);
             return;
         }
 
-        $pdfMediaIds = $response->getContent();
+        $imageMediaIds = $response->getContent();
 
         if ($override) {
             $message = new Message(sprintf(
-                'Creating Extract OCR xml files for %s PDF, xml files will be overridden or created.', // @translate,
+                'Creating Extract OCR xml files for %s Image, xml files will be overridden or created.', // @translate,
                 $totalToProcess
             ));
         } else {
             $message = new Message(sprintf(
-                'Creating Extract OCR xml files for %s PDF, without overriding existing xml.', // @translate,
+                'Creating Extract OCR xml files for %s Image, without overriding existing xml.', // @translate,
                 $totalToProcess
             ));
         }
         $this->logger->info($message);
 
-        $countPdf = 0;
+        $countImage = 0;
         $countSkipped = 0;
         $countFailed = 0;
         $countProcessed = 0;
-        foreach ($pdfMediaIds as $pdfMediaId) {
+        foreach ($imageMediaIds as $imageMediaId) {
             if ($this->shouldStop()) {
                 if ($override) {
                     $this->logger->warn(new Message(
@@ -175,17 +176,17 @@ class ExtractOcr extends AbstractJob
                 return;
             }
 
-            $pdfMedia = $this->api->read('media', ['id' => $pdfMediaId])->getContent();
-            $item = $pdfMedia->item();
+            $imageMedia = $this->api->read('media', ['id' => $imageMediaId])->getContent();
+            $item = $imageMedia->item();
 
             // Search if this item has already an xml file.
-            $targetFilename = basename($pdfMedia->source(), '.pdf') . '.xml';
+            $targetFilename = basename($imageMedia->source(), '.jpg') . '.xml';
             // TODO Improve search of an existing xml, that can be imported separatly, or that can be another xml format with the same name.
             $searchXmlFile = $this->getMediaFromFilename($item->id(), $targetFilename, 'xml');
 
-            ++$countPdf;
+            ++$countImage;
             $this->logger->info(sprintf('Index #%1$d/%2$d: Extracting OCR for item #%3$d, media #%4$d "%5$s".', // @translate
-                $countPdf, $totalToProcess, $item->id(), $pdfMedia->id(), $pdfMedia->source()));
+                $countImage, $totalToProcess, $item->id(), $imageMedia->id(), $imageMedia->source()));
 
             if ($override) {
                 if ($searchXmlFile) {
@@ -199,7 +200,7 @@ class ExtractOcr extends AbstractJob
             }
 
             $this->contentValue = null;
-            $xmlMedia = $this->extractOcrForMedia($pdfMedia);
+            $xmlMedia = $this->extractOcrForMedia($imageMedia);
             if ($xmlMedia) {
                 $this->logger->info(sprintf('Media #%1$d created for xml file.', // @translate
                     $xmlMedia->id()));
@@ -212,20 +213,20 @@ class ExtractOcr extends AbstractJob
             }
 
             // Avoid memory issue.
-            unset($pdfMedia);
+            unset($imageMedia);
             unset($xmlMedia);
             unset($item);
         }
 
         if ($override) {
             $message = new Message(sprintf(
-                'Processed %1$d/%2$d pdf files, %3$d xml files created, %4$d failed.', // @translate,
-                $countPdf, $totalToProcess, $countProcessed, $countFailed
+                'Processed %1$d/%2$d image files, %3$d xml files created, %4$d failed.', // @translate,
+                $countImage, $totalToProcess, $countProcessed, $countFailed
             ));
         } else {
             $message = new Message(sprintf(
-                'Processed %1$d/%2$d pdf files, %3$d skipped, %4$d xml files created, %5$d failed.', // @translate,
-                $countPdf, $totalToProcess, $countSkipped, $countProcessed, $countFailed
+                'Processed %1$d/%2$d image files, %3$d skipped, %4$d xml files created, %5$d failed.', // @translate,
+                $countImage, $totalToProcess, $countSkipped, $countProcessed, $countFailed
             ));
         }
         $this->logger->notice($message);
@@ -259,18 +260,18 @@ class ExtractOcr extends AbstractJob
      * @param MediaRepresentation $pdfMedia
      * @return MediaRepresentation|null The xml media.
      */
-    protected function extractOcrForMedia(MediaRepresentation $pdfMedia)
+    protected function extractOcrForMedia(MediaRepresentation $imageMedia)
     {
-        $pdfFilepath = $this->basePath . '/original/' . $pdfMedia->filename();
-        if (!file_exists($pdfFilepath)) {
-            $this->logger->err(sprintf('Missing pdf file (media #%1$d).', $pdfMedia->id())); // @translate
+        $imageFilepath = $this->basePath . '/original/' . $imageMedia->filename();
+        if (!file_exists($imageFilepath)) {
+            $this->logger->err(sprintf('Missing image file (media #%1$d).', $imageMedia->id())); // @translate
             return null;
         }
 
         // Do the conversion of the pdf to xml.
-        $xmlTempFile = $this->pdfToText($pdfFilepath);
+        $xmlTempFile = $this->imageToText($imageFilepath);
         if (empty($xmlTempFile)) {
-            $this->logger->err(sprintf('Xml file was not created for media #%1$s.', $pdfMedia->id())); // @translate
+            $this->logger->err(sprintf('Xml file was not created for media #%1$s.', $imageMedia->id())); // @translate
             return null;
         }
 
@@ -278,8 +279,8 @@ class ExtractOcr extends AbstractJob
         $content = trim(strip_tags($content));
         if (!$this->createEmptyXml && !strlen($content)) {
             $xmlTempFile->delete();
-            $this->logger->notice(new Message('The xml for pdf #%1$d has no text content and is not created.', // @translate
-                $pdfMedia->id()
+            $this->logger->notice(new Message('The xml for image #%1$d has no text content and is not created.', // @translate
+                $imageMedia->id()
             ));
             return null;
         }
@@ -294,12 +295,12 @@ class ExtractOcr extends AbstractJob
         }
 
         // This data is important to get the matching pdf and xml.
-        $source = basename($pdfMedia->source(), '.pdf') . '.xml';
+        $source = basename($imageMedia->source(), '.jpg') . '.xml';
 
         $data = [
             'o:ingester' => 'url',
             'o:item' => [
-                'o:id' => $pdfMedia->item()->id(),
+                'o:id' => $imageMedia->item()->id(),
             ],
             'o:source' => $source,
             'ingest_url' => $xmlStoredFile['url'],
@@ -315,8 +316,8 @@ class ExtractOcr extends AbstractJob
                 '@value' => $content,
                 '@language' => $this->language,
             ];
-            if ($this->store['media_pdf']) {
-                $this->storeContentInProperty($pdfMedia);
+            if ($this->store['media_image']) {
+                $this->storeContentInProperty($imageMedia);
             }
             if ($this->store['media_xml']) {
                 $data[$this->property->term()][] = $this->contentValue;
@@ -324,7 +325,7 @@ class ExtractOcr extends AbstractJob
                     'type' => 'resource:media',
                     // dcterms:isFormatOf.
                     'property_id' => 37,
-                    'value_resource_id' => $pdfMedia->id(),
+                    'value_resource_id' => $imageMedia->id(),
                 ];
             }
         }
@@ -358,19 +359,26 @@ class ExtractOcr extends AbstractJob
      * @param string $pdfFilepath
      * @return \Omeka\File\TempFile|null
      */
-    protected function pdfToText($pdfFilepath)
+
+    //todo cambio función
+    protected function imageToText($imageFilepath)
     {
         $tempFile = $this->tempFileFactory->build();
         $xmlFilepath = $tempFile->getTempPath() . '.xml';
+        $xmlFilepathOcr = $tempFile->getTempPath();
+        var_dump($xmlFilepath);
         @unlink($tempFile->getTempPath());
         $tempFile->setTempPath($xmlFilepath);
 
-        $pdfFilepath = escapeshellarg($pdfFilepath);
-        $xmlFilepath = escapeshellarg($xmlFilepath);
+        $imageFilepath = escapeshellarg($imageFilepath);
+        $xmlFilepathOcr = escapeshellarg($xmlFilepathOcr);
 
-        $command = "pdftohtml -i -c -hidden -xml $pdfFilepath $xmlFilepath";
+        //$command = "pdftohtml -i -c -hidden -xml $pdfFilepath $xmlFilepath";
+        $command = "tesseract $imageFilepath $xmlFilepathOcr -l spa alto";
+        var_dump($command);
 
         $result = $this->cli->execute($command);
+        var_dump($result);
         if ($result === false) {
             $tempFile->delete();
             return null;
@@ -465,7 +473,7 @@ class ExtractOcr extends AbstractJob
         $source = $tempFile->getTempPath();
 
         // Find a unique meaningful filename instead of a hash.
-        $name = date('Ymd_His') . '_pdf2xml';
+        $name = date('Ymd_His') . '_tesseractocr';
         $extension = 'xml';
         $i = 0;
         do {

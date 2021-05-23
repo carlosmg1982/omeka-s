@@ -51,8 +51,7 @@ class Module extends AbstractModule
         $searchServiceAvailable = false;
         $searchMediaTypes = [
             'application/xml',
-            'text/xml',
-            'application/vnd.pdf2xml+xml',
+            'text/xml'
         ];
         foreach ($resource->media() as $media) {
             $mediaType = $media->mediaType();
