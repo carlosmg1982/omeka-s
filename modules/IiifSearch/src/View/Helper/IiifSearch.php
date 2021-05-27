@@ -46,19 +46,9 @@ class IiifSearch extends AbstractHelper
     protected $item;
 
     /**
-     * @var \Omeka\Api\Representation\MediaRepresentation
-     */
-    protected $xmlFile;
-
-    /**
-     * @var string
-     */
-    protected $xmlMediaType;
-
-    /**
      * @var array
      */
-    protected $imageSizes;
+    protected $pages;
 
     public function __construct($basePath)
     {
@@ -124,17 +114,12 @@ class IiifSearch extends AbstractHelper
             return null;
         }
 
-        $xml = $this->loadXml();
-        if (empty($xml)) {
-            return null;
-        }
-
         $this->prepareImageSizes();
 
-        return $this->searchFullTextPdfXml($xml, $queryWords);
+        return $this->searchFullTextXml($queryWords);
     }
 
-    protected function searchFullTextPdfXml(SimpleXmlElement $xml, $queryWords)
+    protected function searchFullTextXml($queryWords)
     {
         $result = [
             'resources' => [],
@@ -158,107 +143,100 @@ class IiifSearch extends AbstractHelper
         try {
             $hit = 0;
             $index = 0;
-            foreach($xml->Layout->Page as $xmlPage) {
-                ++$index;
-                $attributes = $xmlPage->attributes();
-                //$page['number'] = (string) @$attributes->PHYSICAL_IMG_NR;
-                $page['number'] = "1";
-                $page['width'] = (string) @$attributes->WIDTH;
-                $page['height'] = (string) @$attributes->HEIGHT;
-                if (!strlen($page['number']) || !strlen($page['width']) || !strlen($page['height'])) {
-                    $view->logger()->warn(sprintf(
-                        'Incomplete data for xml file from pdf media #%1$s, page %2$s.', // @translate
-                        $this->xmlFile->id(), $index
-                    ));
-                    continue;
-                }
+            foreach($this->pages as $key=>$item) {
+                if($item['xml']) {
+                    $pageIndex = $key+1;
+                    $xml = $this->loadXml($item['xml']);
+                    foreach ($xml->Layout->Page as $xmlPage) {
+                        ++$index;
+                        $attributes = $xmlPage->attributes();
+                        //$page['number'] = (string) @$attributes->PHYSICAL_IMG_NR;
+                        $page['number'] = (string) $pageIndex;
+                        $page['width'] = (string)@$attributes->WIDTH;
+                        $page['height'] = (string)@$attributes->HEIGHT;
+                        if (!strlen($page['number']) || !strlen($page['width']) || !strlen($page['height'])) {
+                            $view->logger()->warn(sprintf(
+                                'Incomplete data for xml file from pdf media #%1$s, page %2$s.', // @translate
+                                $item['xml']->id(), $index
+                            ));
+                            continue;
+                        }
 
-                $pageIndex = 0;
-                // Should be the same than index.
-                //$pageIndex = $page['number'] - 1;
-                /*
-                $pageIndex = $page['number'];
-                $view->logger()->warn($pageIndex." ".$index);
-                if ($pageIndex !== $index) {
-                    $view->logger()->warn(sprintf(
-                        'Inconsistent data for xml file from pdf media #%1$s, page %2$s.', // @translate
-                        $this->xmlFile->id(), $index
-                    ));
-                    continue;
-                }
-                */
+                        $hits = [];
+                        $hitMatches = [];
+                        $rowIndex = -1;
+                        foreach ($xmlPage->PrintSpace->ComposedBlock as $indexComposedBlock => $xmlComposedBlock) {
+                            foreach ($xmlComposedBlock->TextBlock as $indexTextBlock => $xmlTextBlock) {
+                                foreach ($xmlTextBlock->TextLine as $indexTextLine => $xmlTextLine) {
+                                    foreach ($xmlTextLine as $xmlWord) {
+                                        ++$rowIndex;
 
-                $hits = [];
-                $hitMatches = [];
-                $rowIndex = -1;
-                foreach ($xmlPage->PrintSpace->ComposedBlock as $indexComposedBlock => $xmlComposedBlock) {
-                    foreach($xmlComposedBlock->TextBlock as $indexTextBlock => $xmlTextBlock) {
-                        foreach($xmlTextBlock->TextLine as $indexTextLine => $xmlTextLine) {
-                            foreach($xmlTextLine as $xmlWord) {
-                                ++$rowIndex;
+                                        $wordAttributes = $xmlWord->attributes();
 
-                                $wordAttributes = $xmlWord->attributes();
+                                        $zone = [];
+                                        $zone['text'] = strip_tags((string)@$wordAttributes->CONTENT);
+                                        foreach ($queryWords as $chars) {
+                                            if (!empty($item['width'])
+                                                && !empty($item['height'])
+                                                && mb_strlen($chars) >= $this->minimumQueryLength
+                                                && preg_match('/' . preg_quote($chars, '/') . '/Uui', $zone['text'], $matches) > 0
+                                            ) {
+                                                $zone['top'] = (string)@$wordAttributes->VPOS;
+                                                $zone['left'] = (string)@$wordAttributes->HPOS;
+                                                $zone['width'] = (string)@$wordAttributes->WIDTH;
+                                                $zone['height'] = (string)@$wordAttributes->HEIGHT;
+                                                if (!strlen($zone['top']) || !strlen($zone['left']) || !strlen($zone['width']) || !strlen($zone['height'])) {
+                                                    $view->logger()->warn(sprintf(
+                                                        'Inconsistent data for xml file from pdf media #%1$s, page %2$s, row %3$s.', // @translate
+                                                        $item['xml']->id(), $pageIndex, $rowIndex
+                                                    ));
+                                                    continue;
+                                                }
 
-                                $zone = [];
-                                $zone['text'] = strip_tags((string) @$wordAttributes->CONTENT);
-                                foreach ($queryWords as $chars) {
-                                    if (!empty($this->imageSizes[$pageIndex]['width'])
-                                        && !empty($this->imageSizes[$pageIndex]['height'])
-                                        && mb_strlen($chars) >= $this->minimumQueryLength
-                                        && preg_match('/' . preg_quote($chars, '/') . '/Uui', $zone['text'], $matches) > 0
-                                    ) {
-                                        $zone['top'] = (string) @$wordAttributes->VPOS;
-                                        $zone['left'] = (string) @$wordAttributes->HPOS;
-                                        $zone['width'] = (string) @$wordAttributes->WIDTH;
-                                        $zone['height'] = (string) @$wordAttributes->HEIGHT;
-                                        if (!strlen($zone['top']) || !strlen($zone['left']) || !strlen($zone['width']) || !strlen($zone['height'])) {
-                                            $view->logger()->warn(sprintf(
-                                                'Inconsistent data for xml file from pdf media #%1$s, page %2$s, row %3$s.', // @translate
-                                                $this->xmlFile->id(), $pageIndex, $rowIndex
-                                            ));
-                                            continue;
+                                                ++$hit;
+
+                                                $image = ['width'=>$item['width'],'height'=>$item['height'],'media'=>$item['media']];
+
+                                                $view->logger()->warn(print_r($page, true));
+                                                $view->logger()->warn(print_r($zone, true));
+                                                $view->logger()->warn(print_r($chars, true));
+                                                $view->logger()->warn(print_r($hit, true));
+                                                $view->logger()->warn(print_r([$resource->displayTitle()], true));
+                                                $view->logger()->warn(print_r([$image['width'], $image['height'], $image['media']->filename()], true));
+
+                                                $searchResult = new AnnotationSearchResult;
+                                                $searchResult->initOptions(['baseResultUrl' => $baseResultUrl, 'baseCanvasUrl' => $baseCanvasUrl]);
+                                                $result['resources'][] = $searchResult->setResult(compact('resource', 'image', 'page', 'zone', 'chars', 'hit'));
+
+                                                $view->logger()->warn(__LINE__);
+                                                $hits[] = $searchResult->getId();
+                                                // TODO Get matches as whole world and all matches in last time (preg_match_all).
+                                                // TODO Get the text before first and last hit of the page.
+                                                $hitMatches[] = $matches[0];
+                                            }
                                         }
-
-                                        $view->logger()->warn(print_r($zone,true));
-
-                                        ++$hit;
-
-                                        $image = $this->imageSizes[$pageIndex];
-
-                                        $searchResult = new AnnotationSearchResult;
-                                        $searchResult->initOptions(['baseResultUrl' => $baseResultUrl, 'baseCanvasUrl' => $baseCanvasUrl]);
-                                        $result['resources'][] = $searchResult->setResult(compact('resource', 'image', 'page', 'zone', 'chars', 'hit'));
-
-                                        $view->logger()->warn(print_r($page,true));
-                                        $view->logger()->warn(print_r($zone,true));
-                                        $view->logger()->warn(print_r($chars,true));
-                                        $view->logger()->warn(print_r($hit,true));
-                                        $view->logger()->warn(print_r([$resource->displayTitle()],true));
-                                        $view->logger()->warn(print_r([$image['width'],$image['height'],$image['media']->filename()],true));
-
-                                        $hits[] = $searchResult->getId();
-                                        // TODO Get matches as whole world and all matches in last time (preg_match_all).
-                                        // TODO Get the text before first and last hit of the page.
-                                        $hitMatches[] = $matches[0];
                                     }
                                 }
                             }
                         }
+
+                        // Add hits per page.
+                        if ($hits) {
+                            $searchHit = new SearchHit;
+                            $searchHit['annotations'] = $hits;
+                            $searchHit['match'] = implode(' ', array_unique($hitMatches));
+                            $result['hits'][] = $searchHit;
+                        }
                     }
                 }
-
-                // Add hits per page.
-                if ($hits) {
-                    $searchHit = new SearchHit;
-                    $searchHit['annotations'] = $hits;
-                    $searchHit['match'] = implode(' ', array_unique($hitMatches));
-                    $result['hits'][] = $searchHit;
-                }
             }
+
         } catch (\Exception $e) {
-            $view->logger()->err(sprintf('Error: PDF to XML conversion failed for media file #%d!', $this->xmlFile->id()));
+            $view->logger()->err(sprintf('Error: PDF to XML conversion failed for media file #%d!'));
             return null;
         }
+
+        $view->logger()->warn(__LINE__);
 
         return $result;
     }
@@ -270,26 +248,46 @@ class IiifSearch extends AbstractHelper
      */
     protected function prepareSearch()
     {
-        $this->xmlFile = null;
-        $this->imageSizes = [];
+
+        $view = $this->getView();
+        $this->pages = [];
+        $images = [];
         foreach ($this->item->media() as $media) {
             $mediaType = $media->mediaType();
-            if (!$this->xmlFile && in_array($mediaType, $this->xmlMediaTypes)) {
-                $this->xmlFile = $media;
-            } elseif ($media->hasOriginal() && strtok($mediaType, '/') === 'image') {
-                $this->imageSizes[] = [
-                    'media' => $media,
-                ];
+            if ($media->hasOriginal() && strtok($mediaType, '/') === 'image') {
+                $this->pages[]['media'] = $media;
+                $images[] = $media->id();
             }
         }
-        return isset($this->xmlFile) && count($this->imageSizes);
+        foreach($this->pages as $key=>$item) {
+            if($item['xml'])
+                $view->logger()->warn("xml ".$key." ".$item['xml']->displayTitle());
+            if($item['media'])
+                $view->logger()->warn("media ".$key." ".$item['media']->displayTitle());
+        }
+        foreach ($this->item->media() as $media) {
+            $mediaType = $media->mediaType();
+            if (
+                    in_array($mediaType, $this->xmlMediaTypes) &&
+                    $media->value('dcterms:isFormatOf') !== null &&
+                    in_array($media->value('dcterms:isFormatOf')->valueResource()->id(),$images)
+            ) {
+                $this->pages[array_search($media->value('dcterms:isFormatOf')->valueResource()->id(),$images)]['xml'] = $media;
+            }
+        }
+        foreach($this->pages as $key=>$item) {
+            if($item['xml'])
+                $view->logger()->warn("xml ".$key." ".$item['xml']->displayTitle());
+            if($item['media'])
+                $view->logger()->warn("media ".$key." ".$item['media']->displayTitle());
+        }
+        return count($this->pages);
     }
 
     protected function prepareImageSizes(): void
     {
-        $view = $this->getView();
         // TODO Use plugin imageSize from modules IiifServer and ImageServer.
-        foreach ($this->imageSizes as &$image) {
+        foreach ($this->pages as &$image) {
             // Some media types don't save the file locally.
             if ($filename = $image['media']->filename()) {
                 $filepath = $this->basePath . '/original/' . $filename;
@@ -323,22 +321,22 @@ class IiifSearch extends AbstractHelper
     /**
      * @return \SimpleXMLElement|null
      */
-    protected function loadXml()
+    protected function loadXml($resource)
     {
-        $filepath = ($filename = $this->xmlFile->filename())
+        $filepath = ($filename = $resource->filename())
             ? $this->basePath . '/original/' . $filename
-            : $this->xmlFile->originalUrl();
+            : $resource->originalUrl();
 
-        $this->xmlMediaType = $this->getView()->xmlMediaType($filepath, $this->xmlFile->mediaType());
-        if (!in_array($this->xmlMediaType, $this->xmlSupportedMediaTypes)) {
-            $this->getView()->logger()->err(sprintf('Error: Xml format "%1$s" is not managed currently (media #%2$d).', $this->xmlMediaType, $this->xmlFile->id()));
+        $mediaType = $this->getView()->xmlMediaType($filepath, $resource->mediaType());
+        if (!in_array($mediaType, $this->xmlSupportedMediaTypes)) {
+            $this->getView()->logger()->err(sprintf('Error: Xml format "%1$s" is not managed currently (media #%2$d).', $mediaType, $resource->id()));
             return null;
         }
 
         $xmlContent = simplexml_load_file($filepath);
 
         if (!$xmlContent) {
-            $this->getView()->logger()->err(sprintf('Error: Cannot get XML content from media #%d!', $this->xmlFile->id()));
+            $this->getView()->logger()->err(sprintf('Error: Cannot get XML content from media #%d!', $resource->id()));
             return null;
         }
 
