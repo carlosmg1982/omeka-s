@@ -144,7 +144,7 @@ class IiifSearch extends AbstractHelper
             $hit = 0;
             $index = 0;
             foreach($this->pages as $key=>$item) {
-                if($item['xml']) {
+                if(isset($item['xml'])) {
                     $pageIndex = $key+1;
                     $xml = $this->loadXml($item['xml']);
                     foreach ($xml->Layout->Page as $xmlPage) {
@@ -187,8 +187,8 @@ class IiifSearch extends AbstractHelper
                                                 $zone['height'] = (string)@$wordAttributes->HEIGHT;
                                                 if (!strlen($zone['top']) || !strlen($zone['left']) || !strlen($zone['width']) || !strlen($zone['height'])) {
                                                     $view->logger()->warn(sprintf(
-                                                        'Inconsistent data for xml file from pdf media #%1$s, page %2$s, row %3$s.', // @translate
-                                                        $item['xml']->id(), $pageIndex, $rowIndex
+                                                        'Inconsistent data for xml file from pdf media #%1$s, page %2$s.', // @translate
+                                                        $item['xml']->id(), $pageIndex
                                                     ));
                                                     continue;
                                                 }
@@ -197,18 +197,10 @@ class IiifSearch extends AbstractHelper
 
                                                 $image = ['width'=>$item['width'],'height'=>$item['height'],'media'=>$item['media']];
 
-                                                $view->logger()->warn(print_r($page, true));
-                                                $view->logger()->warn(print_r($zone, true));
-                                                $view->logger()->warn(print_r($chars, true));
-                                                $view->logger()->warn(print_r($hit, true));
-                                                $view->logger()->warn(print_r([$resource->displayTitle()], true));
-                                                $view->logger()->warn(print_r([$image['width'], $image['height'], $image['media']->filename()], true));
-
                                                 $searchResult = new AnnotationSearchResult;
                                                 $searchResult->initOptions(['baseResultUrl' => $baseResultUrl, 'baseCanvasUrl' => $baseCanvasUrl]);
                                                 $result['resources'][] = $searchResult->setResult(compact('resource', 'image', 'page', 'zone', 'chars', 'hit'));
 
-                                                $view->logger()->warn(__LINE__);
                                                 $hits[] = $searchResult->getId();
                                                 // TODO Get matches as whole world and all matches in last time (preg_match_all).
                                                 // TODO Get the text before first and last hit of the page.
@@ -222,10 +214,12 @@ class IiifSearch extends AbstractHelper
 
                         // Add hits per page.
                         if ($hits) {
-                            $searchHit = new SearchHit;
-                            $searchHit['annotations'] = $hits;
-                            $searchHit['match'] = implode(' ', array_unique($hitMatches));
-                            $result['hits'][] = $searchHit;
+                            foreach($hits as $hit) {
+                                $searchHit = new SearchHit;
+                                $searchHit['annotations'] = $hits;
+                                $searchHit['match'] = implode(' ', array_unique($hitMatches));
+                                $result['hits'][] = $searchHit;
+                            }
                         }
                     }
                 }
@@ -235,8 +229,6 @@ class IiifSearch extends AbstractHelper
             $view->logger()->err(sprintf('Error: PDF to XML conversion failed for media file #%d!'));
             return null;
         }
-
-        $view->logger()->warn(__LINE__);
 
         return $result;
     }
@@ -259,12 +251,6 @@ class IiifSearch extends AbstractHelper
                 $images[] = $media->id();
             }
         }
-        foreach($this->pages as $key=>$item) {
-            if($item['xml'])
-                $view->logger()->warn("xml ".$key." ".$item['xml']->displayTitle());
-            if($item['media'])
-                $view->logger()->warn("media ".$key." ".$item['media']->displayTitle());
-        }
         foreach ($this->item->media() as $media) {
             $mediaType = $media->mediaType();
             if (
@@ -274,12 +260,6 @@ class IiifSearch extends AbstractHelper
             ) {
                 $this->pages[array_search($media->value('dcterms:isFormatOf')->valueResource()->id(),$images)]['xml'] = $media;
             }
-        }
-        foreach($this->pages as $key=>$item) {
-            if($item['xml'])
-                $view->logger()->warn("xml ".$key." ".$item['xml']->displayTitle());
-            if($item['media'])
-                $view->logger()->warn("media ".$key." ".$item['media']->displayTitle());
         }
         return count($this->pages);
     }
