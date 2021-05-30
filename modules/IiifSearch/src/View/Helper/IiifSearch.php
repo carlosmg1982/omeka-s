@@ -149,6 +149,7 @@ class IiifSearch extends AbstractHelper
                     $xml = $this->loadXml($item['xml']);
                     foreach ($xml->Layout->Page as $xmlPage) {
                         ++$index;
+                        $keyTextBlock = 0;
                         $attributes = $xmlPage->attributes();
                         //$page['number'] = (string) @$attributes->PHYSICAL_IMG_NR;
                         $page['number'] = (string) $pageIndex;
@@ -163,18 +164,16 @@ class IiifSearch extends AbstractHelper
                         }
 
                         $hits = [];
-                        $hitMatches = [];
-                        $rowIndex = -1;
                         foreach ($xmlPage->PrintSpace->ComposedBlock as $indexComposedBlock => $xmlComposedBlock) {
                             foreach ($xmlComposedBlock->TextBlock as $indexTextBlock => $xmlTextBlock) {
                                 foreach ($xmlTextBlock->TextLine as $indexTextLine => $xmlTextLine) {
+                                    $indexFind = 0;
                                     foreach ($xmlTextLine as $xmlWord) {
-                                        ++$rowIndex;
-
                                         $wordAttributes = $xmlWord->attributes();
 
                                         $zone = [];
                                         $zone['text'] = strip_tags((string)@$wordAttributes->CONTENT);
+                                        $textBlock[$key][$keyTextBlock][] = $zone['text'];
                                         foreach ($queryWords as $chars) {
                                             if (!empty($item['width'])
                                                 && !empty($item['height'])
@@ -195,29 +194,35 @@ class IiifSearch extends AbstractHelper
 
                                                 ++$hit;
 
+                                                end($textBlock[$key][$keyTextBlock]);
+                                                $indexFind = key($textBlock[$key][$keyTextBlock]);
+
                                                 $image = ['width'=>$item['width'],'height'=>$item['height'],'media'=>$item['media']];
 
                                                 $searchResult = new AnnotationSearchResult;
                                                 $searchResult->initOptions(['baseResultUrl' => $baseResultUrl, 'baseCanvasUrl' => $baseCanvasUrl]);
                                                 $result['resources'][] = $searchResult->setResult(compact('resource', 'image', 'page', 'zone', 'chars', 'hit'));
 
-                                                $hits[] = $searchResult->getId();
+                                                //$hits[] = ['id'=>$searchResult->getId(),'match'=>$matches[0],'index'=>$indexFind,'page'=>$key,'paragraph'=>$keyTextBlock/*,'before'=>$textBlock,'after'=>$textBlock*/];
+                                                $hits[] = ['id'=>$searchResult->getId(),'match'=>$zone['text'],'index'=>$indexFind,'page'=>$key,'paragraph'=>$keyTextBlock/*,'before'=>$textBlock,'after'=>$textBlock*/];
                                                 // TODO Get matches as whole world and all matches in last time (preg_match_all).
                                                 // TODO Get the text before first and last hit of the page.
-                                                $hitMatches[] = $matches[0];
+                                                //$hitMatches[] = $matches[0];
                                             }
                                         }
                                     }
                                 }
+                                ++$keyTextBlock;
                             }
                         }
-
                         // Add hits per page.
                         if ($hits) {
-                            foreach($hits as $hit) {
+                            foreach($hits as $hitItem) {
                                 $searchHit = new SearchHit;
-                                $searchHit['annotations'] = $hits;
-                                $searchHit['match'] = implode(' ', array_unique($hitMatches));
+                                $searchHit['annotations'] = [$hitItem['id']];
+                                $searchHit['match'] = $hitItem['match'];
+                                $searchHit['before'] = implode(" ",array_slice($textBlock[$hitItem['page']][$hitItem['paragraph']],0,$hitItem['index']-1));
+                                $searchHit['after'] = implode(" ",array_slice($textBlock[$hitItem['page']][$hitItem['paragraph']],$hitItem['index']+1));
                                 $result['hits'][] = $searchHit;
                             }
                         }
