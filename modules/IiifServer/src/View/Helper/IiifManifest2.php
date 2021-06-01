@@ -36,6 +36,7 @@ use Omeka\Api\Representation\AssetRepresentation;
 use Omeka\Api\Representation\ItemRepresentation;
 use Omeka\Api\Representation\MediaRepresentation;
 use Omeka\File\TempFileFactory;
+use Omeka\Stdlib\Message;
 
 /**
  * @todo Remove casting with "(object)", that was used because the json encoding converts array into object or array.
@@ -644,6 +645,49 @@ class IiifManifest2 extends AbstractHelper
      * @param MediaRepresentation $media
      * @return \stdClass|null
      */
+    protected function _iiifSeeAlso(MediaRepresentation $media)
+    {
+        /** @var \Omeka\Api\Representation\AssetRepresentation $thumbnailAsset */
+        // TODO The media type can be non-standard for pdf (text/pdf…) on old servers.
+        // TODO CHECK PDFS
+        $query = [
+            'media_type' => 'text/xml',
+            'extension' => 'xml',
+            'item_id' => $media->item()->id()
+        ];
+
+        /** @var \Omeka\Api\Representation\MediaRepresentation[] $medias */
+        $response = $this->view->api()->search('media', $query);
+        $totalToProcess = $response->getTotalResults();
+
+        if (empty($totalToProcess)) {
+            $message = new Message('No item with a image to process.'); // @translate,
+            $this->getView()->logger()->notice($message);
+            return;
+        }
+
+        $seeAlsoMedia = $response->getContent();
+        foreach($seeAlsoMedia as $item) {
+            if($item->value('dcterms:isFormatOf') !=null && $media->id() == $item->value('dcterms:isFormatOf')->valueResource()->id() ) {
+                $seeAlsoItem = $this->view->api()->searchOne('media',['id'=>$item->id()])->getContent();
+                $seeAlso = [
+                    '@id' => $seeAlsoItem->originalUrl(),
+                    'profile' => "http://www.loc.gov/standards/alto/v3/alto.xsd",
+                    'format' => $seeAlsoItem->mediaType()
+                ];
+                return (object) $seeAlso;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Create an IIIF thumbnail object from an Omeka file.
+     *
+     * @param MediaRepresentation $media
+     * @return \stdClass|null
+     */
     protected function _iiifThumbnail(MediaRepresentation $media)
     {
         /** @var \Omeka\Api\Representation\AssetRepresentation $thumbnailAsset */
@@ -829,6 +873,8 @@ class IiifManifest2 extends AbstractHelper
 
         // Thumbnail of the current file.
         $canvas['thumbnail'] = $this->_iiifThumbnail($media);
+
+        $canvas['seeAlso'] = $this->_iiifSeeAlso($media);
 
         // If it is an external IIIF image.
         if ($media->ingester() == 'iiif') {
