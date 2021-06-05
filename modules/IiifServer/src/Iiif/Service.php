@@ -58,6 +58,15 @@ class Service extends AbstractType
     ];
 
     protected $id;
+    /**
+     * @var \Omeka\Api\Representation\MediaRepresentation
+     */
+    protected $resource;
+
+    /**
+     * @var array
+     */
+    protected $options;
 
     public function __construct(AbstractResourceEntityRepresentation $resource = null, array $options = null)
     {
@@ -70,7 +79,8 @@ class Service extends AbstractType
             unset($options['@type']);
         }
         $options = array_filter($options);
-        parent::__construct($resource, $options);
+        $this->resource = $resource;
+        $this->options = $options;
     }
 
     public function getContent()
