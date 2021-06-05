@@ -366,7 +366,6 @@ class ExtractOcr extends AbstractJob
         $tempFile = $this->tempFileFactory->build();
         $xmlFilepath = $tempFile->getTempPath() . '.xml';
         $xmlFilepathOcr = $tempFile->getTempPath();
-        var_dump($xmlFilepath);
         @unlink($tempFile->getTempPath());
         $tempFile->setTempPath($xmlFilepath);
 
@@ -375,10 +374,8 @@ class ExtractOcr extends AbstractJob
 
         //$command = "pdftohtml -i -c -hidden -xml $pdfFilepath $xmlFilepath";
         $command = "tesseract $imageFilepath $xmlFilepathOcr -l spa alto";
-        var_dump($command);
 
         $result = $this->cli->execute($command);
-        var_dump($result);
         if ($result === false) {
             $tempFile->delete();
             return null;
