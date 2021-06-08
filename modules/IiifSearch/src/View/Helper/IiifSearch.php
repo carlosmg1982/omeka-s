@@ -245,8 +245,6 @@ class IiifSearch extends AbstractHelper
      */
     protected function prepareSearch()
     {
-
-        $view = $this->getView();
         $this->pages = [];
         $images = [];
         foreach ($this->item->media() as $media) {
