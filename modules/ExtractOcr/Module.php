@@ -27,9 +27,9 @@ class Module extends AbstractModule
 
         // Don't install if the pdftotext command doesn't exist.
         // See: http://stackoverflow.com/questions/592620/check-if-a-program-exists-from-a-bash-script
-        if ((int) shell_exec('hash pdftotext 2>&- || echo 1')) {
+        if ((int) shell_exec('hash tesseract 2>&- || echo 1')) {
             throw new ModuleCannotInstallException(
-                $t->translate('The pdftotext command-line utility is not installed. pdftotext must be installed to install this plugin.') //@translate
+                $t->translate('The tesseract command-line utility is not installed. tesseract must be installed to install this plugin.') //@translate
             );
         }
 
