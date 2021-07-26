@@ -203,19 +203,19 @@ class Module extends AbstractModule
         /** @var \Omeka\Entity\Item $item */
         $item = $response->getContent();
 
-        $hasPdf = false;
+        $hasImage = false;
         $targetFilename = null;
         foreach ($item->getMedia() as $media) {
-            if (strtolower((string) $media->getExtension()) === 'pdf'
-                && $media->getMediaType() === 'application/pdf'
+            if (strtolower((string) $media->getExtension()) === 'jpg'
+                && $media->getMediaType() === 'image/jpeg'
             ) {
-                $hasPdf = true;
-                $targetFilename = basename($media->getSource(), '.pdf') . '.xml';
+                $hasImage = true;
+                $targetFilename = basename($media->getSource(), '.jpg') . '.xml';
                 break;
             }
         }
 
-        if (!$hasPdf || $targetFilename === '.xml') {
+        if (!$hasImage || $targetFilename === '.xml') {
             return;
         }
 
